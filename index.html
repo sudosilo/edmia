@@ -988,8 +988,8 @@ const POST_ERR = {
   link_too_long: 'link is too long',
   link_rejected: 'that link is not allowed',
   link_flagged: 'that link is flagged as unsafe',
-  link_check_failed: 'could not check that link, try again or leave it blank',
-  links_disabled: 'links are off right now, leave it blank',
+  link_check_failed: 'could not check that link',
+  links_disabled: 'links are off right now',
   slow_down: 'too fast, wait a few seconds',
   score_too_fast: 'score rejected',
   score_rejected: 'score rejected',
@@ -1026,13 +1026,13 @@ async function submitName() {
 
   // A refused link or a too-soon post never costs the score.
   // Drop the link, wait out the 10 second limit, post again.
-  if (/^link_/.test(err) || err === 'slow_down') {
-    const why = /^link_/.test(err) ? (POST_ERR[err] || 'link not accepted') + '. posting without it' : 'posting';
+  if (/^links?_/.test(err) || err === 'slow_down') {
+    const why = /^links?_/.test(err) ? (POST_ERR[err] || 'link not accepted') + '. posting without it' : 'posting';
     posting = true;
     btn.disabled = true;
     for (let i = 11; i > 0; i--) { st.textContent = why + ' in ' + i; await new Promise(res => setTimeout(res, 1000)); }
     st.textContent = 'sending';
-    const r2 = await Scores.submit({ game: 'edmia', tag: name, link: /^link_/.test(err) ? '' : link, score: pending, duration: Math.max(1000, runDuration) });
+    const r2 = await Scores.submit({ game: 'edmia', tag: name, link: /^links?_/.test(err) ? '' : link, score: pending, duration: Math.max(1000, runDuration) });
     posting = false;
     btn.disabled = false;
     if (r2 && r2.ok) return showScores('global', r2.entry && r2.entry.id, r2.rank ? 'you placed #' + r2.rank + ' in the world' : 'posted');
