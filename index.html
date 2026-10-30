@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/space-mono@5/index.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/major-mono-display@5/index.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<script src="https://2026-10-30-orange-scores.vercel.app/sdk.js" defer></script>
 <style>
   :root {
     --bg: #fef5e7;
@@ -125,12 +126,28 @@
   .ctl-btn { width: 44px; height: 44px; background: var(--paper); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); font-size: 18px; }
 
   .score-table { width: 100%; max-width: 300px; padding: 10px 14px; font-family: 'VT323', monospace; }
-  .score-row { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; padding: 3px 0; font-size: 20px; border-bottom: 1px dashed rgba(26,24,20,0.2); }
+  .score-row { display: grid; grid-template-columns: 30px auto 1fr auto; align-items: center; gap: 10px; padding: 3px 0; font-size: 20px; border-bottom: 1px dashed rgba(26,24,20,0.2); }
   .score-row:last-child { border-bottom: none; }
   .score-row.fresh { color: var(--hot-a); }
   .score-rank { opacity: 0.5; font-size: 16px; }
   .score-empty { opacity: 0.5; padding: 14px; font-size: 16px; text-align: center; }
 
+  .feed { width: 100%; max-width: 300px; font-family: 'VT323', monospace; font-size: 17px; text-align: left; min-height: 20px; }
+  .feed-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; border-bottom: 1px dashed rgba(26,24,20,0.15); }
+  .feed-row:last-child { border-bottom: none; }
+  .feed-row .ago { opacity: 0.5; font-size: 14px; }
+  .feed-head { font-size: 9px; letter-spacing: 2px; opacity: 0.6; margin-bottom: 2px; font-family: 'Space Mono', monospace; }
+  .link-input {
+    width: 100%; max-width: 300px; padding: 8px 10px;
+    border: 2px solid var(--ink); background: var(--paper); color: var(--ink);
+    font-family: 'Space Mono', monospace; font-size: 13px;
+    user-select: text; -webkit-user-select: text; touch-action: manipulation;
+  }
+  .tabs { display: flex; gap: 6px; }
+  .tab { padding: 5px 14px; border: 2px solid var(--ink); background: var(--paper); font-family: 'Major Mono Display', monospace; font-size: 11px; letter-spacing: 2px; color: var(--ink); }
+  .tab.on { background: var(--ink); color: var(--paper); }
+  .score-row a, .score-row span.dom, .feed-row a { color: var(--accent); font-family: 'Space Mono', monospace; font-size: 11px; text-decoration: none; }
+  .status { font-size: 11px; min-height: 16px; opacity: 0.8; }
   .popup {
     position: absolute; pointer-events: none; z-index: 40;
     font-family: 'VT323', monospace; font-size: 28px; color: var(--accent);
@@ -177,6 +194,7 @@
         </div>
         <button class="big-btn" id="startBtn">TAP TO PLAY</button>
         <button class="link-btn" id="scoresBtn">HIGH SCORES</button>
+        <div class="feed" id="feed"></div>
         <p class="tiny">headphones recommended</p>
       </div>
       <div class="screen hidden" id="screenPause">
@@ -188,6 +206,7 @@
         <div class="title small">GAME OVER</div>
         <div class="final" id="overScore">0</div>
         <p class="blurb" id="overLevel"></p>
+        <p class="status" id="overStatus"></p>
         <button class="big-btn" id="againBtn">PLAY AGAIN</button>
         <button class="link-btn" id="scoresBtn2">HIGH SCORES</button>
       </div>
@@ -201,13 +220,18 @@
           <div class="slot" data-slot="2">A</div>
         </div>
         <div class="letter-pad" id="letterPad"></div>
+        <input class="link-input" id="linkInput" type="url" inputmode="url" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your link, optional">
         <div class="row">
           <button class="ctl-btn" id="backBtn">&#9003;</button>
           <button class="big-btn compact" id="submitBtn">SUBMIT</button>
         </div>
+        <p class="status" id="nameStatus"></p>
+        <button class="link-btn" id="skipBtn">SKIP</button>
       </div>
       <div class="screen hidden" id="screenScores">
         <div class="title small">TOP SCORES</div>
+        <div class="tabs"><button class="tab on" id="tabGlobal">WORLD</button><button class="tab" id="tabLocal">THIS PHONE</button></div>
+        <p class="status" id="scoresStatus"></p>
         <div class="score-table panel" id="scoreTable"></div>
         <button class="big-btn compact" id="scoresBack">BACK</button>
       </div>
@@ -873,6 +897,7 @@ async function startGame() {
     resize();
     spawn();
     T().start('+0.05');
+    if (window.Scores) Scores.start('edmia');
   } finally {
     starting = false;
   }
@@ -904,12 +929,16 @@ function gameOver() {
     A.chord.releaseAll();
     A.stab.releaseAll();
   }
-  if (qualifies(score)) showNameEntry(score);
-  else {
-    document.getElementById('overScore').textContent = score;
-    document.getElementById('overLevel').textContent = 'reached ' + lvl().name;
-    show('screenOver');
-  }
+  runDuration = window.Scores ? Scores.elapsed('edmia') : 0;
+  if (score > 0) showNameEntry(score);
+  else showOver('');
+}
+
+function showOver(msg) {
+  document.getElementById('overScore').textContent = score;
+  document.getElementById('overLevel').textContent = 'reached ' + lvl().name;
+  document.getElementById('overStatus').textContent = msg;
+  show('screenOver');
 }
 
 document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
@@ -931,9 +960,17 @@ function qualifies(s) {
   return list.length < 10 || s > list[list.length - 1].score;
 }
 
-let initials = ['A', 'A', 'A'], slot = 0, pending = 0;
+let initials = ['A', 'A', 'A'], slot = 0, pending = 0, runDuration = 0;
+const ME_KEY = 'edmia_me_v1';
+function loadMe() { try { return JSON.parse(localStorage.getItem(ME_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function saveMe(o) { try { localStorage.setItem(ME_KEY, JSON.stringify(o)); } catch (e) {} }
 function showNameEntry(s) {
-  pending = s; initials = ['A', 'A', 'A']; slot = 0;
+  const me = loadMe();
+  pending = s;
+  initials = (typeof me.tag === 'string' && me.tag.length === 3) ? me.tag.split('') : ['A', 'A', 'A'];
+  slot = 0;
+  document.getElementById('linkInput').value = me.link || '';
+  document.getElementById('nameStatus').textContent = '';
   document.getElementById('nameScore').textContent = s;
   renderSlots();
   show('screenName');
@@ -944,24 +981,115 @@ function renderSlots() {
     el.classList.toggle('active', i === slot);
   });
 }
-function submitName() {
+const POST_ERR = {
+  offline: 'world board unreachable, saved on this phone',
+  tag_rejected: 'those initials are not allowed',
+  link_invalid: 'link must start with http or https',
+  link_too_long: 'link is too long',
+  link_rejected: 'that link is not allowed',
+  link_flagged: 'that link is flagged as unsafe',
+  link_check_failed: 'could not check that link, try again or leave it blank',
+  links_disabled: 'links are off right now, leave it blank',
+  slow_down: 'too fast, wait a few seconds',
+  score_too_fast: 'score rejected',
+  score_rejected: 'score rejected',
+  duration_rejected: 'score rejected'
+};
+
+let posting = false;
+async function submitName() {
+  if (posting) return;
   const name = initials.join('');
-  const ts = Date.now();
-  const list = loadScores();
-  list.push({ initials: name, score: pending, ts });
-  list.sort((a, b) => b.score - a.score);
-  const top = list.slice(0, 10);
-  saveScores(top);
-  showScores(top.findIndex(r => r.ts === ts));
+  let link = document.getElementById('linkInput').value.trim();
+  if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+  saveMe({ tag: name, link: link });
+
+  // Local copy always saves, so the phone board works offline
+  if (qualifies(pending)) {
+    const list = loadScores();
+    list.push({ initials: name, score: pending, ts: Date.now() });
+    list.sort((a, b) => b.score - a.score);
+    saveScores(list.slice(0, 10));
+  }
+
+  if (!window.Scores) { showOver(POST_ERR.offline); return; }
+  posting = true;
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = 'SENDING';
+  const r = await Scores.submit({ game: 'edmia', tag: name, link: link, score: pending, duration: Math.max(1000, runDuration) });
+  posting = false;
+  btn.textContent = 'SUBMIT';
+  if (r && r.ok) showScores('global', r.entry && r.entry.id, r.rank ? 'you placed #' + r.rank + ' in the world' : 'posted');
+  else if (r && (/^link_/.test(r.error) || r.error === 'tag_rejected' || r.error === 'slow_down')) document.getElementById('nameStatus').textContent = POST_ERR[r.error] || 'not accepted';
+  else showOver(POST_ERR[(r && r.error) || 'offline'] || 'could not post, saved on this phone');
 }
-function showScores(fresh) {
-  const list = loadScores();
+
+let scoresTab = 'global';
+function scoreRow(rank, tag, entry, scoreVal, fresh) {
+  const row = document.createElement('div');
+  row.className = 'score-row' + (fresh ? ' fresh' : '');
+  const a = document.createElement('div'); a.className = 'score-rank'; a.textContent = String(rank).padStart(2, '0');
+  const b = document.createElement('div'); b.textContent = tag;
+  const c = document.createElement('div');
+  if (entry && entry.domain && window.Scores) c.appendChild(Scores.linkEl(entry));
+  const d = document.createElement('div'); d.textContent = scoreVal;
+  row.append(a, b, c, d);
+  return row;
+}
+
+async function showScores(tab, freshId, msg) {
+  scoresTab = tab || scoresTab;
+  document.getElementById('tabGlobal').classList.toggle('on', scoresTab === 'global');
+  document.getElementById('tabLocal').classList.toggle('on', scoresTab === 'local');
   const t = document.getElementById('scoreTable');
-  t.innerHTML = list.length ? list.map((r, i) =>
-    `<div class="score-row${i === fresh ? ' fresh' : ''}"><div class="score-rank">${String(i + 1).padStart(2, '0')}</div><div>${r.initials}</div><div>${r.score}</div></div>`
-  ).join('') : '<div class="score-empty">no scores yet</div>';
+  const st = document.getElementById('scoresStatus');
+  st.textContent = msg || '';
+  t.textContent = '';
   show('screenScores');
+  const empty = (txt) => { const e = document.createElement('div'); e.className = 'score-empty'; e.textContent = txt; t.appendChild(e); };
+
+  if (scoresTab === 'local') {
+    const list = loadScores();
+    if (!list.length) return empty('no scores yet');
+    list.forEach((r, i) => t.appendChild(scoreRow(i + 1, r.initials, null, r.score, false)));
+    return;
+  }
+  if (!window.Scores) return empty('world board unreachable');
+  empty('loading');
+  const r = await Scores.board('edmia', 10);
+  if (scoresTab !== 'global') return;
+  t.textContent = '';
+  if (!r || !r.ok) return empty('world board unreachable');
+  if (!r.board.length) return empty('no scores yet, be first');
+  r.board.forEach(e => t.appendChild(scoreRow(e.rank, e.tag, e, e.score, e.id === freshId)));
 }
+
+function ago(ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  return Math.round(s / 86400) + 'd ago';
+}
+
+async function loadFeed() {
+  const box = document.getElementById('feed');
+  if (!window.Scores || document.getElementById('screenStart').classList.contains('hidden')) return;
+  const r = await Scores.activity('edmia', 4);
+  if (!r || !r.ok || !r.activity.length) { box.textContent = ''; return; }
+  box.textContent = '';
+  const h = document.createElement('div'); h.className = 'feed-head'; h.textContent = 'RECENT PLAYS';
+  box.appendChild(h);
+  r.activity.forEach(a => {
+    const row = document.createElement('div'); row.className = 'feed-row';
+    const left = document.createElement('span'); left.textContent = a.tag + '  ' + a.score;
+    const mid = document.createElement('span'); if (a.domain) mid.appendChild(Scores.linkEl(a));
+    const right = document.createElement('span'); right.className = 'ago'; right.textContent = ago(a.ts);
+    row.append(left, mid, right);
+    box.appendChild(row);
+  });
+}
+setInterval(loadFeed, 20000);
 
 (function buildPad() {
   const pad = document.getElementById('letterPad');
@@ -980,9 +1108,12 @@ document.getElementById('startBtn').addEventListener('click', startGame);
 document.getElementById('againBtn').addEventListener('click', startGame);
 document.getElementById('resumeBtn').addEventListener('click', resumeGame);
 document.getElementById('quitBtn').addEventListener('click', () => { state = 'over'; piece = null; T().stop(); show('screenStart'); });
-document.getElementById('scoresBtn').addEventListener('click', () => showScores(-1));
-document.getElementById('scoresBtn2').addEventListener('click', () => showScores(-1));
-document.getElementById('scoresBack').addEventListener('click', () => show('screenStart'));
+document.getElementById('scoresBtn').addEventListener('click', () => showScores('global'));
+document.getElementById('scoresBtn2').addEventListener('click', () => showScores('global'));
+document.getElementById('tabGlobal').addEventListener('click', () => showScores('global'));
+document.getElementById('tabLocal').addEventListener('click', () => showScores('local'));
+document.getElementById('scoresBack').addEventListener('click', () => { show('screenStart'); loadFeed(); });
+document.getElementById('skipBtn').addEventListener('click', () => showOver(''));
 
 /* ---------------- INPUT ---------------- */
 
@@ -1022,6 +1153,7 @@ canvas.addEventListener('pointerup', (e) => {
 // Keyboard for desktop players
 const keysDown = new Set();
 window.addEventListener('keydown', (e) => {
+  if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') submitName(); return; }
   if (keysDown.has(e.code)) return;
   keysDown.add(e.code);
   if (state === 'menu' && (e.code === 'Enter' || e.code === 'Space')) { startGame(); return; }
@@ -1048,6 +1180,7 @@ newGrid();
 new ResizeObserver(resize).observe(canvas);
 resize();
 show('screenStart');
+window.addEventListener('load', loadFeed);
 requestAnimationFrame(frame);
 </script>
 </body>
