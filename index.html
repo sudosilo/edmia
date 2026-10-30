@@ -1019,9 +1019,26 @@ async function submitName() {
   const r = await Scores.submit({ game: 'edmia', tag: name, link: link, score: pending, duration: Math.max(1000, runDuration) });
   posting = false;
   btn.textContent = 'SUBMIT';
-  if (r && r.ok) showScores('global', r.entry && r.entry.id, r.rank ? 'you placed #' + r.rank + ' in the world' : 'posted');
-  else if (r && (/^link_/.test(r.error) || r.error === 'tag_rejected' || r.error === 'slow_down')) document.getElementById('nameStatus').textContent = POST_ERR[r.error] || 'not accepted';
-  else showOver(POST_ERR[(r && r.error) || 'offline'] || 'could not post, saved on this phone');
+  if (r && r.ok) return showScores('global', r.entry && r.entry.id, r.rank ? 'you placed #' + r.rank + ' in the world' : 'posted');
+  const err = (r && r.error) || 'offline';
+  const st = document.getElementById('nameStatus');
+  if (err === 'tag_rejected') { st.textContent = POST_ERR[err]; return; }
+
+  // A refused link or a too-soon post never costs the score.
+  // Drop the link, wait out the 10 second limit, post again.
+  if (/^link_/.test(err) || err === 'slow_down') {
+    const why = /^link_/.test(err) ? (POST_ERR[err] || 'link not accepted') + '. posting without it' : 'posting';
+    posting = true;
+    btn.disabled = true;
+    for (let i = 11; i > 0; i--) { st.textContent = why + ' in ' + i; await new Promise(res => setTimeout(res, 1000)); }
+    st.textContent = 'sending';
+    const r2 = await Scores.submit({ game: 'edmia', tag: name, link: /^link_/.test(err) ? '' : link, score: pending, duration: Math.max(1000, runDuration) });
+    posting = false;
+    btn.disabled = false;
+    if (r2 && r2.ok) return showScores('global', r2.entry && r2.entry.id, r2.rank ? 'you placed #' + r2.rank + ' in the world' : 'posted');
+    return showOver(POST_ERR[(r2 && r2.error) || 'offline'] || 'could not post, saved on this phone');
+  }
+  showOver(POST_ERR[err] || 'could not post, saved on this phone');
 }
 
 let scoresTab = 'global';
